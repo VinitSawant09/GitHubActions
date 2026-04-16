@@ -1,1 +1,1 @@
-# GitHubActions 1.0.1
+# GitHubActions 1.0.1.
