@@ -34,7 +34,7 @@ jobs:
       - name: Bump minor version
         run: |
           IFS='.' read -r major minor patch <<< "${CURRENT_VERSION}"
-          NEW_VERSION="${major}.$((minor + 1)).0"
+          NEW_VERSION="${major}.$((minor + 1)).$(patch)"
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
 
       - name: Update pom.xml
