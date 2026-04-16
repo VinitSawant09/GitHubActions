@@ -1,0 +1,53 @@
+name: Bump develop version on release branch creation
+
+on:
+  create:
+
+permissions:
+  contents: write
+
+jobs:
+  bump-version:
+    if: startsWith(github.ref_name, '@release/')
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      - name: Get current version from pom.xml
+        id: version
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "CURRENT_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Current version: $VERSION"
+
+      - name: Bump minor version (1.0.0 → 1.1.0)
+        id: bump
+        run: |
+          IFS='.' read -r major minor patch <<< "${CURRENT_VERSION}"
+
+          NEW_MINOR=$((minor + 1))
+          NEW_VERSION="${major}.${NEW_MINOR}.0"
+
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+          echo "Bumped version: $NEW_VERSION"
+
+      - name: Update pom.xml version
+        run: |
+          mvn versions:set -DnewVersion=${NEW_VERSION} -DgenerateBackupPoms=false
+
+      - name: Commit and push to develop
+        run: |
+          git add pom.xml
+          git commit -m "chore: bump develop version to ${NEW_VERSION} after @release branch creation" || exit 0
+          git push origin develop
