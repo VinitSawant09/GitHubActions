@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   bump-version:
-    if: startsWith(github.ref_name, '@release/')
+    if: startsWith(github.ref_name, 'release/')
 
     runs-on: ubuntu-latest
 
