@@ -1,0 +1,89 @@
+name: Sync release commits to develop (cherry-pick PR)
+
+on:
+  push:
+    branches:
+      - 'release/**'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      # -------------------------
+      # 1. Checkout full repo
+      # -------------------------
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      # -------------------------
+      # 2. Identify release branch + commit
+      # -------------------------
+      - name: Get commit info
+        run: |
+          echo "RELEASE_BRANCH=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+          echo "COMMIT_SHA=${GITHUB_SHA}" >> $GITHUB_ENV
+
+      # -------------------------
+      # 3. Create sync branch from develop
+      # -------------------------
+      - name: Create sync branch
+        run: |
+          git checkout develop
+          git pull origin develop
+
+          SYNC_BRANCH="sync-${RELEASE_BRANCH}-${COMMIT_SHA::7}"
+          echo "SYNC_BRANCH=$SYNC_BRANCH" >> $GITHUB_ENV
+
+          git checkout -b $SYNC_BRANCH
+
+      # -------------------------
+      # 4. Cherry-pick commit
+      # -------------------------
+      - name: Cherry-pick commit
+        run: |
+          git cherry-pick -x $COMMIT_SHA || (
+            echo "Cherry-pick failed" &&
+            git cherry-pick --abort &&
+            exit 1
+          )
+
+      # -------------------------
+      # 5. Push sync branch
+      # -------------------------
+      - name: Push branch
+        run: |
+          git push origin $SYNC_BRANCH
+
+      # -------------------------
+      # 6. Create PR to develop
+      # -------------------------
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: develop
+          branch: ${{ env.SYNC_BRANCH }}
+          title: "Sync release → develop: ${{ env.COMMIT_SHA }}"
+          body: |
+            Auto-generated PR.
+
+            Commit from release branch `${{ env.RELEASE_BRANCH }}`:
+
+            ```
+            ${{ env.COMMIT_SHA }}
+            ```
+
+            This change was cherry-picked into develop.
+          labels: release-sync
