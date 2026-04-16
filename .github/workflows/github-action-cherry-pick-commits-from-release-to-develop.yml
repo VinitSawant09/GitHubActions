@@ -11,8 +11,11 @@ permissions:
 
 jobs:
   sync:
+  
+     # 🔥 KEY FIX: ignore branch creation event
+    if: github.event.before != '0000000000000000000000000000000000000000'
+    
     runs-on: ubuntu-latest
-
     steps:
       # -------------------------
       # 1. Checkout full history
