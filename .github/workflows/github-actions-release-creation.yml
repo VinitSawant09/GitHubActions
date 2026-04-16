@@ -1,10 +1,11 @@
-name: Bump develop version on release branch creation
+name: Bump develop version on release branch creation (PR only)
 
 on:
   create:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   bump-version:
@@ -24,30 +25,45 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-      - name: Get current version from pom.xml
+      - name: Get current version
         id: version
         run: |
           VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "CURRENT_VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Current version: $VERSION"
 
-      - name: Bump minor version (1.0.0 → 1.1.0)
-        id: bump
+      - name: Bump minor version
         run: |
           IFS='.' read -r major minor patch <<< "${CURRENT_VERSION}"
-
-          NEW_MINOR=$((minor + 1))
-          NEW_VERSION="${major}.${NEW_MINOR}.0"
-
+          NEW_VERSION="${major}.$((minor + 1)).0"
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-          echo "Bumped version: $NEW_VERSION"
 
-      - name: Update pom.xml version
+      - name: Update pom.xml
         run: |
           mvn versions:set -DnewVersion=${NEW_VERSION} -DgenerateBackupPoms=false
 
-      - name: Commit and push to develop
+      - name: Create branch for PR
         run: |
+          BRANCH="bump-develop-${NEW_VERSION}-${GITHUB_RUN_ID}"
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+
+          git checkout -b $BRANCH
           git add pom.xml
-          git commit -m "chore: bump develop version to ${NEW_VERSION} after @release branch creation" || exit 0
-          git push origin develop
+          git commit -m "chore: bump develop version to ${NEW_VERSION} after @release creation"
+          git push origin $BRANCH
+
+      - name: Create Pull Request to develop
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: develop
+          branch: ${{ env.BRANCH }}
+          title: "Bump develop version to ${NEW_VERSION}"
+          body: |
+            Auto-generated PR.
+
+            Triggered by creation of `${{ github.ref_name }}`.
+
+            This updates develop version from:
+            `${{ env.CURRENT_VERSION }}` → `${{ env.NEW_VERSION }}`
+
+          labels: version-bump
