@@ -1,4 +1,4 @@
-name: Sync release commits to develop (filtered cherry-pick PR)
+name: Sync release commits to develop (stable cherry-pick PR)
 
 on:
   push:
@@ -11,11 +11,8 @@ permissions:
 
 jobs:
   sync:
-  
-     # 🔥 KEY FIX: ignore branch creation event
-    if: github.event.before != '0000000000000000000000000000000000000000'
-    
     runs-on: ubuntu-latest
+
     steps:
       # -------------------------
       # 1. Checkout full history
@@ -31,54 +28,48 @@ jobs:
           git config user.email "github-actions@github.com"
 
       # -------------------------
-      # 2. Capture context
+      # 2. Capture commit info
       # -------------------------
-      - name: Capture commit details
+      - name: Capture context
         run: |
-          echo "RELEASE_BRANCH=${GITHUB_REF_NAME}" >> $GITHUB_ENV
           echo "COMMIT_SHA=${GITHUB_SHA}" >> $GITHUB_ENV
+          echo "RELEASE_BRANCH=${GITHUB_REF_NAME}" >> $GITHUB_ENV
 
       # -------------------------
-      # 3. Decide whether to skip commit
+      # 3. Filter unwanted commits
       # -------------------------
-      - name: Filter version-bump / pom-only commits
-        id: filter
+      - name: Filter version/pom-only commits
         run: |
-          set +e
-
-          COMMIT_MSG=$(git log -1 --pretty=%B $COMMIT_SHA)
-          echo "Commit message: $COMMIT_MSG"
-
+          MSG=$(git log -1 --pretty=%B $COMMIT_SHA)
           FILES=$(git diff-tree --no-commit-id --name-only -r $COMMIT_SHA)
-          echo "Changed files: $FILES"
+
+          echo "Message: $MSG"
+          echo "Files: $FILES"
 
           SKIP=false
 
           # Skip version bump commits
-          if echo "$COMMIT_MSG" | grep -E "chore:|bump|version"; then
+          if echo "$MSG" | grep -E "chore:|bump|version"; then
             SKIP=true
           fi
 
-          # Skip if ONLY pom.xml changed
+          # Skip if only pom.xml changed
           if [ "$FILES" = "pom.xml" ]; then
             SKIP=true
           fi
 
           echo "SKIP=$SKIP" >> $GITHUB_ENV
 
-      # -------------------------
-      # 4. Exit if nothing useful
-      # -------------------------
       - name: Exit if skipped
         if: env.SKIP == 'true'
         run: |
-          echo "Skipping commit (version bump or pom-only change)"
+          echo "Skipping commit (version/pom-only)"
           exit 0
 
       # -------------------------
-      # 5. Create sync branch from develop
+      # 4. Create sync branch
       # -------------------------
-      - name: Create sync branch
+      - name: Create sync branch from develop
         run: |
           git checkout develop
           git pull origin develop
@@ -89,29 +80,27 @@ jobs:
           git checkout -b $SYNC_BRANCH
 
       # -------------------------
-      # 6. Cherry-pick commit
+      # 5. Cherry-pick commit
       # -------------------------
-      - name: Cherry-pick commit into develop branch
+      - name: Cherry-pick commit
         run: |
           git cherry-pick -x $COMMIT_SHA || (
-            echo "Cherry-pick failed" &&
-            git cherry-pick --abort &&
+            echo "Cherry-pick failed"
+            git cherry-pick --abort
             exit 1
           )
 
       # -------------------------
-      # 7. Push sync branch
+      # 6. Push branch (NO FORCE)
       # -------------------------
-      - name: Push branch
+      - name: Push sync branch
         run: |
-          git add .
-          git commit -m "sync: cherry-pick ${COMMIT_SHA}" || true
           git push origin $SYNC_BRANCH
 
       # -------------------------
-      # 8. Create Pull Request
+      # 7. Create PR to develop
       # -------------------------
-      - name: Create PR to develop
+      - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -119,7 +108,7 @@ jobs:
           branch: ${{ env.SYNC_BRANCH }}
           title: "Sync release → develop: ${{ env.COMMIT_SHA }}"
           body: |
-            Auto-generated PR from release branch `${{ env.RELEASE_BRANCH }}`.
+            Auto-generated PR from `${{ env.RELEASE_BRANCH }}`
 
             ### Commit
             ```
@@ -127,6 +116,7 @@ jobs:
             ```
 
             ### Notes
-            - Only non-version-bump commits are synced
-            - pom.xml-only changes are ignored
+            - Ignores version bump commits
+            - Ignores pom.xml-only changes
+            - No force push used (stable PR state)
           labels: release-sync
