@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.vs</groupId>
 	<artifactId>GitHubActions</artifactId>
-	<version>SG1154-12345-Story-SNAPSHOT</version>
+	<version>FG1154-12345-Feature-SNAPSHOT</version>
 	<name/>
 	<description/>
 	<url/>
