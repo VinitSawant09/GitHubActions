@@ -1,0 +1,70 @@
+name: Restore pom.xml after SG squash merge
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  restore-version:
+    if: >
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'feature/SG') &&
+      startsWith(github.event.pull_request.base.ref, 'feature/FG')
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          fetch-depth: 0
+
+      - name: Set git identity
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      # 🔥 CRITICAL: find pre-squash commit
+      - name: Get previous commit on feature branch
+        id: prev
+        run: |
+          PREV_COMMIT=$(git log --first-parent -n 2 --pretty=format:"%H" | tail -n 1)
+          echo "PREV_COMMIT=$PREV_COMMIT" >> $GITHUB_ENV
+          echo "Previous commit: $PREV_COMMIT"
+
+      - name: Restore pom.xml from previous commit
+        run: |
+          git checkout $PREV_COMMIT -- pom.xml
+
+      # Prevent empty PRs
+      - name: Check for changes
+        id: diff
+        run: |
+          if git diff --quiet; then
+            echo "no_changes=true" >> $GITHUB_ENV
+          else
+            echo "no_changes=false" >> $GITHUB_ENV
+          fi
+
+      - name: Stop if no changes
+        if: env.no_changes == 'true'
+        run: exit 0
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: restore-pom-${{ github.run_id }}
+          title: "Restore pom.xml version (post SG squash merge)"
+          body: |
+            Auto-generated PR.
+
+            Story branch `${{ github.event.pull_request.head.ref }}` (squash merged)
+            overwrote the version in `${{ github.event.pull_request.base.ref }}`.
+
+            This restores the previous version from commit:
+            `${{ env.PREV_COMMIT }}`
