@@ -74,7 +74,7 @@ jobs:
           git checkout develop
           git pull origin develop
 
-          SYNC_BRANCH="sync-${RELEASE_BRANCH}-${COMMIT_SHA::7}"
+          SYNC_BRANCH="sync-${RELEASE_BRANCH}-${COMMIT_SHA::7}-${GITHUB_RUN_ID}"
           echo "SYNC_BRANCH=$SYNC_BRANCH" >> $GITHUB_ENV
 
           git checkout -b $SYNC_BRANCH
